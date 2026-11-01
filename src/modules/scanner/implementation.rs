@@ -392,9 +392,10 @@ fn value_embeds_bip21_uri(value: &str) -> bool {
     let Some(start) = lower.find(scheme) else {
         return false;
     };
-    // The address is only the token before the next `?`. A later question
-    // mark in ordinary text (`bitcoin:donation?`, `?help`) is not a URI.
-    let Some((address, query)) = value[start + scheme.len()..].split_once('?') else {
+    // The embedded URI is only a real second URI when its address is valid.
+    // Ordinary query text (`bitcoin:donation?`, `?help`) is not a URI and
+    // must not be rejected.
+    let Some((address, _)) = value[start + scheme.len()..].split_once('?') else {
         return false;
     };
     if address.is_empty() {
@@ -402,16 +403,7 @@ fn value_embeds_bip21_uri(value: &str) -> bool {
     }
 
     let normalized = Scanner::normalize_address_for_validation(address);
-    if BitcoinAddressValidator::validate_address(&normalized).is_ok() {
-        return true;
-    }
-
-    // Doubled receive URIs use placeholder addresses, but still glue on a
-    // key=value query. Bare `?` or `?help` does not.
-    query.split('&').any(|param| match param.split_once('=') {
-        Some((key, _)) => !key.is_empty(),
-        None => false,
-    })
+    BitcoinAddressValidator::validate_address(&normalized).is_ok()
 }
 
 #[async_trait]

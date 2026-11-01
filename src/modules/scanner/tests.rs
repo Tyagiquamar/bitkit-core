@@ -223,14 +223,19 @@ mod tests {
         // Review payloads: a second URI is concatenated onto the first.
         // The common Bitkit shape puts message=Bitkit before lightning, so the
         // second message is hidden inside the first lightning value.
+        let addr = "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn";
         for doubled in [
-            "bitcoin:A?message=Bitkit&lightning=LNAbitcoin:B?message=Bitkit&lightning=LNB",
-            "bitcoin:A?amount=0.001&lightning=LNAbitcoin:B?amount=0.002&lightning=LNB",
-            "BITCOIN:A?amount=0.001bitcoin:A?amount=0.002",
+            format!(
+                "bitcoin:A?message=Bitkit&lightning=LNAbitcoin:{addr}?message=Bitkit&lightning=LNB"
+            ),
+            format!(
+                "bitcoin:A?amount=0.001&lightning=LNAbitcoin:{addr}?amount=0.002&lightning=LNB"
+            ),
+            format!("BITCOIN:A?amount=0.001bitcoin:{addr}?amount=0.002"),
         ] {
             assert!(
                 matches!(
-                    Scanner::decode_onchain(doubled),
+                    Scanner::decode_onchain(&doubled),
                     Err(DecodingError::InvalidFormat)
                 ),
                 "{doubled}"
@@ -417,6 +422,26 @@ mod tests {
                 );
             }
             _ => panic!("Expected an on-chain invoice"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bitcoin_colon_in_query_value_with_params_is_not_rejected() {
+        let address = "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn";
+        for value in [
+            "bitcoin:donation?amount=0.000035",
+            "https://example.com/bitcoin:donation?help=1",
+            "pay via bitcoin:donation?note=hi",
+        ] {
+            let uri = format!("bitcoin:{address}?amount=0.000035&message={value}");
+            let decoded = Scanner::decode(uri.clone()).await.unwrap();
+            match decoded {
+                Scanner::OnChain { invoice } => {
+                    assert_eq!(invoice.address, address, "{uri}");
+                    assert_eq!(invoice.message.as_deref(), Some(value), "{uri}");
+                }
+                _ => panic!("Expected an on-chain invoice for '{uri}'"),
+            }
         }
     }
 
